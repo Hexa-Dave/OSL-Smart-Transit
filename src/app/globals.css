@@ -1,0 +1,163 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* OSL Light Mode - Passenger App */
+    --background: 210 40% 98%;
+    --foreground: 222 47% 15%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 15%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 15%;
+    --primary: 330 85% 55%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 65% 25%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 20% 45%;
+    --accent: 330 85% 95%;
+    --accent-foreground: 330 85% 35%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 330 85% 55%;
+    --radius: 0.75rem;
+    --chart-1: 330 85% 55%;
+    --chart-2: 220 65% 25%;
+    --chart-3: 45 93% 58%;
+    --chart-4: 160 60% 45%;
+    --chart-5: 280 65% 60%;
+
+    /* Custom OSL Colors */
+    --osl-pink: 330 85% 55%;
+    --osl-pink-light: 330 85% 75%;
+    --osl-pink-dark: 330 85% 40%;
+    --osl-navy: 220 65% 25%;
+    --osl-navy-light: 220 65% 35%;
+    --osl-navy-dark: 220 65% 15%;
+    --osl-amber: 45 93% 58%;
+    --osl-amber-light: 45 93% 75%;
+  }
+
+  .dark {
+    /* OSL Dark Mode - Driver Dashboard */
+    --background: 222 47% 8%;
+    --foreground: 210 40% 98%;
+    --card: 222 47% 12%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222 47% 10%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 330 85% 55%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 65% 35%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 222 47% 15%;
+    --muted-foreground: 215 20% 65%;
+    --accent: 330 85% 20%;
+    --accent-foreground: 330 85% 75%;
+    --destructive: 0 62% 35%;
+    --destructive-foreground: 0 85% 97%;
+    --border: 222 47% 20%;
+    --input: 222 47% 20%;
+    --ring: 330 85% 55%;
+    --chart-1: 330 85% 55%;
+    --chart-2: 220 65% 45%;
+    --chart-3: 45 93% 58%;
+    --chart-4: 160 60% 45%;
+    --chart-5: 280 65% 60%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+@layer utilities {
+  /* Pulse animation for signal button */
+  @keyframes signal-pulse {
+    0%, 100% {
+      transform: scale(1);
+      box-shadow: 0 0 0 0 hsl(330 85% 55% / 0.7);
+    }
+    50% {
+      transform: scale(1.02);
+      box-shadow: 0 0 0 20px hsl(330 85% 55% / 0);
+    }
+  }
+
+  .animate-signal-pulse {
+    animation: signal-pulse 2s ease-in-out infinite;
+  }
+
+  /* Success pulse animation */
+  @keyframes success-pulse {
+    0%, 100% {
+      transform: scale(1);
+      box-shadow: 0 0 0 0 hsl(160 60% 45% / 0.7);
+    }
+    50% {
+      transform: scale(1.05);
+      box-shadow: 0 0 0 30px hsl(160 60% 45% / 0);
+    }
+  }
+
+  .animate-success-pulse {
+    animation: success-pulse 1.5s ease-in-out infinite;
+  }
+
+  /* Alert flash animation for driver */
+  @keyframes alert-flash {
+    0%, 100% {
+      background-color: hsl(45 93% 58% / 0.2);
+      border-color: hsl(45 93% 58%);
+    }
+    50% {
+      background-color: hsl(45 93% 58% / 0.4);
+      border-color: hsl(45 93% 70%);
+    }
+  }
+
+  .animate-alert-flash {
+    animation: alert-flash 0.75s ease-in-out infinite;
+  }
+
+  /* Slide in animation */
+  @keyframes slide-in {
+    0% {
+      transform: translateX(100%);
+      opacity: 0;
+    }
+    100% {
+      transform: translateX(0);
+      opacity: 1;
+    }
+  }
+
+  .animate-slide-in {
+    animation: slide-in 0.3s ease-out forwards;
+  }
+
+  /* Fade in animation */
+  @keyframes fade-in {
+    0% {
+      opacity: 0;
+      transform: scale(0.95);
+    }
+    100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  .animate-fade-in {
+    animation: fade-in 0.3s ease-out forwards;
+  }
+}
