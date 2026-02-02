@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import {
@@ -125,8 +125,11 @@ interface PassengerAppProps {
 export default function PassengerApp({ className }: PassengerAppProps) {
   const [showLineSelector, setShowLineSelector] = useState(false);
   const [selectedLine, setSelectedLine] = useState<number | null>(null);
-  const [signalSent, setSignalSent] = useState(false);
-  const { stops, selectedStop, setSelectedStop, sendSignal } = useTransitStore();
+  const { stops, selectedStop, setSelectedStop, sendSignal, cancelSignal, passengerMode, setPassengerMode } = useTransitStore();
+  const signals = useTransitStore((s) => s.signals);
+
+  // In generic mode, track all user's signals; in single mode, track one
+  const userSignals = signals.filter((s) => s.mode === passengerMode);
 
   const handleTapSignal = () => {
     setShowLineSelector(true);
@@ -134,33 +137,64 @@ export default function PassengerApp({ className }: PassengerAppProps) {
 
   const handleLineSelect = (lineNumber: number) => {
     setSelectedLine(lineNumber);
-    sendSignal(selectedStop, lineNumber);
-    setShowLineSelector(false);
-    setSignalSent(true);
-
-    // Reset after 5 seconds
-    setTimeout(() => {
-      setSignalSent(false);
-      setSelectedLine(null);
-    }, 5000);
+    sendSignal(selectedStop, lineNumber, passengerMode);
+    // In generic mode, keep showing the selector so user can add more; in single, close it
+    if (passengerMode === 'single') {
+      setShowLineSelector(false);
+    }
+    // Don't reset selectedLine in generic mode
   };
 
-  const handleReset = () => {
-    setSignalSent(false);
-    setSelectedLine(null);
+  const handleCancelSignal = (signalId: string) => {
+    cancelSignal(signalId);
+  };
+
+  const formatRemaining = (secs: number) => {
+    const s = Math.max(0, Math.floor(secs));
+    const mm = Math.floor(s / 60);
+    const ss = s % 60;
+    return `${mm}:${ss.toString().padStart(2, '0')}`;
   };
 
   return (
     <div className={`min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 ${className}`}>
       {/* Header */}
       <header className="bg-white shadow-sm border-b border-slate-200">
-        <div className="max-w-md mx-auto px-4 py-4">
+        <div className="max-w-md mx-auto px-4 py-4 space-y-3">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-xl font-bold text-[hsl(220,65%,25%)]">OSL</h1>
               <p className="text-xs text-slate-500">Oulu Region Transport</p>
             </div>
             <Oulu2026Logo />
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-slate-600">Mode:</span>
+            <button
+              onClick={() => setPassengerMode('single')}
+              className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
+                passengerMode === 'single'
+                  ? 'bg-pink-500 text-white'
+                  : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+              }`}
+            >
+              Single
+            </button>
+            <button
+              onClick={() => setPassengerMode('generic')}
+              className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
+                passengerMode === 'generic'
+                  ? 'bg-pink-500 text-white'
+                  : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+              }`}
+            >
+              Generic
+            </button>
+            {passengerMode === 'generic' && userSignals.length > 0 && (
+              <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-pink-500 text-white">
+                {userSignals.length} active
+              </span>
+            )}
           </div>
         </div>
       </header>
@@ -186,49 +220,78 @@ export default function PassengerApp({ className }: PassengerAppProps) {
           </CardContent>
         </Card>
 
-        {/* Main Signal Button */}
-        <div className="flex flex-col items-center py-8">
-          {!signalSent ? (
-            <>
-              <button
-                onClick={handleTapSignal}
-                className="w-56 h-56 rounded-full bg-gradient-to-br from-pink-500 to-pink-600 text-white flex flex-col items-center justify-center shadow-2xl hover:from-pink-600 hover:to-pink-700 transition-all duration-300 animate-signal-pulse focus:outline-none focus:ring-4 focus:ring-pink-300"
-                aria-label="Tap to signal bus"
-              >
-                <TapIcon className="w-20 h-20 mb-2" />
-                <span className="text-xl font-bold">Tap to Signal</span>
-                <span className="text-sm opacity-80">Bus</span>
-              </button>
-              <p className="mt-6 text-center text-slate-500 text-sm max-w-xs">
-                Tap the button to notify approaching buses that you are waiting at this stop
-              </p>
-            </>
+        {/* Main Signal Button / Active Signals */}
+        <div className="flex flex-col items-center py-8 w-full">
+          {passengerMode === 'single' ? (
+            // Single mode: show large Tap / Signal Sent UI for one signal
+            (() => {
+              const signal = userSignals[0];
+              return !signal ? (
+                <>
+                  <button
+                    onClick={handleTapSignal}
+                    className="w-56 h-56 rounded-full bg-gradient-to-br from-pink-500 to-pink-600 text-white flex flex-col items-center justify-center shadow-2xl hover:from-pink-600 hover:to-pink-700 transition-all duration-300 animate-signal-pulse focus:outline-none focus:ring-4 focus:ring-pink-300"
+                    aria-label="Tap to signal bus"
+                  >
+                    <TapIcon className="w-20 h-20 mb-2" />
+                    <span className="text-xl font-bold">Tap to Signal</span>
+                    <span className="text-sm opacity-80">Bus</span>
+                  </button>
+                  <p className="mt-6 text-center text-slate-500 text-sm max-w-xs">
+                    Tap the button to notify approaching buses that you are waiting at this stop
+                  </p>
+                </>
+              ) : (
+                <div className="animate-fade-in flex flex-col items-center w-full">
+                  <div className="w-56 h-56 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-500 text-white flex flex-col items-center justify-center shadow-2xl animate-success-pulse">
+                    <CheckIcon className="w-24 h-24 mb-2" />
+                    <span className="text-xl font-bold">Signal Sent</span>
+                  </div>
+                  <Card className="mt-6 bg-emerald-50 border-emerald-200 w-full">
+                    <CardContent className="p-4 text-center">
+                      <Badge className="bg-emerald-500 text-white mb-2">
+                        Line {signal.line}
+                      </Badge>
+                      <p className="text-emerald-800 font-medium">Bus Line {signal.line} notified.</p>
+                      <p className="text-sm text-emerald-700 mt-1">Stop: {signal.stopName}</p>
+                      <p className="text-emerald-700 font-mono text-lg mt-2">Arrival in {formatRemaining(signal.remainingSeconds)}</p>
+                    </CardContent>
+                  </Card>
+                  <div className="mt-4 flex gap-2 justify-center">
+                    <Button className="bg-red-500 hover:bg-red-600 text-white" onClick={() => handleCancelSignal(signal.id)}>
+                      Cancel Signal
+                    </Button>
+                  </div>
+                </div>
+              );
+            })()
           ) : (
-            <div className="animate-fade-in flex flex-col items-center">
-              <div className="w-56 h-56 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-500 text-white flex flex-col items-center justify-center shadow-2xl animate-success-pulse">
-                <CheckIcon className="w-24 h-24 mb-2" />
-                <span className="text-xl font-bold">Signal Sent</span>
+            // Generic mode: show list of active signals and allow adding more
+            <div className="animate-fade-in w-full space-y-4">
+              {/* Active Signals List */}
+              <div className="space-y-3">
+                {userSignals.map((signal) => (
+                  <Card key={signal.id} className="bg-emerald-50 border-emerald-200 border-2">
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <Badge className="bg-emerald-500 text-white">Line {signal.line}</Badge>
+                            <Badge variant="outline" className="border-emerald-300 text-emerald-700">{signal.stopName}</Badge>
+                          </div>
+                          <p className="text-emerald-700 font-mono text-sm">Arrival in {formatRemaining(signal.remainingSeconds)}</p>
+                        </div>
+                        <Button variant="ghost" size="sm" onClick={() => handleCancelSignal(signal.id)} className="text-red-500 hover:text-red-700 hover:bg-red-100 text-xs h-8">✕</Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
               </div>
-              <Card className="mt-6 bg-emerald-50 border-emerald-200">
-                <CardContent className="p-4 text-center">
-                  <Badge className="bg-emerald-500 text-white mb-2">
-                    Line {selectedLine}
-                  </Badge>
-                  <p className="text-emerald-800 font-medium">
-                    Bus Line {selectedLine} notified.
-                  </p>
-                  <p className="text-emerald-600 text-sm mt-1">
-                    Please remain visible at the stop.
-                  </p>
-                </CardContent>
-              </Card>
-              <Button
-                variant="outline"
-                className="mt-4 text-slate-600"
-                onClick={handleReset}
-              >
-                Send Another Signal
-              </Button>
+
+              {/* Send Another Signal Button */}
+              <button onClick={handleTapSignal} className="w-full py-3 rounded-xl bg-gradient-to-r from-pink-500 to-pink-600 text-white font-semibold hover:from-pink-600 hover:to-pink-700 transition-all shadow-md">
+                + Add Another Stop
+              </button>
             </div>
           )}
         </div>
@@ -264,14 +327,19 @@ export default function PassengerApp({ className }: PassengerAppProps) {
         <DialogContent className="max-w-sm mx-auto bg-white">
           <DialogHeader>
             <DialogTitle className="text-xl text-center text-[hsl(220,65%,25%)]">
-              Select Bus Line
+              Select Bus Line {passengerMode === 'generic' && `for ${selectedStop}`}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-3 py-4">
             {BUS_LINES.map((line) => (
               <button
                 key={line.number}
-                onClick={() => handleLineSelect(line.number)}
+                onClick={() => {
+                  handleLineSelect(line.number);
+                  if (passengerMode === 'single') {
+                    setShowLineSelector(false);
+                  }
+                }}
                 className="w-full p-4 rounded-xl border-2 border-slate-200 hover:border-pink-500 hover:bg-pink-50 transition-all flex items-center gap-4 group"
               >
                 <span className={`w-12 h-12 rounded-xl ${line.color} text-white flex items-center justify-center text-xl font-bold`}>
@@ -288,6 +356,17 @@ export default function PassengerApp({ className }: PassengerAppProps) {
               </button>
             ))}
           </div>
+          {passengerMode === 'generic' && userSignals.length > 0 && (
+            <div className="border-t pt-3">
+              <Button
+                variant="outline"
+                className="w-full text-slate-600"
+                onClick={() => setShowLineSelector(false)}
+              >
+                Done Adding Signals
+              </Button>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

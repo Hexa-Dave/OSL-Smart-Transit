@@ -14,6 +14,10 @@ export interface Signal {
   line: number;
   timestamp: Date;
   acknowledged: boolean;
+  // remaining time in seconds until the bus arrives / signal expires
+  remainingSeconds: number;
+  // mode: "single" (exclusive) or "generic" (multiple concurrent)
+  mode: 'single' | 'generic';
 }
 
 interface TransitStore {
@@ -26,13 +30,23 @@ interface TransitStore {
 
   // Passenger state
   selectedStop: string;
+  passengerMode: 'single' | 'generic';
+  
+  // Driver state
+  driverBusFilter: 'single' | 'all'; // single = line 1 only, all = all lines
+  
+  // UI state
+  driverFilteredLine: number; // which line to show in "single" mode
 
   // Actions
-  sendSignal: (stopName: string, line: number) => void;
-  acknowledgeSignal: (signalId: string) => void;
+  sendSignal: (stopName: string, line: number, mode: 'single' | 'generic') => void;
+  cancelSignal: (signalId: string) => void;
   dismissSignal: (signalId: string) => void;
   setSelectedStop: (stopName: string) => void;
   advanceToNextStop: () => void;
+  setPassengerMode: (mode: 'single' | 'generic') => void;
+  setDriverBusFilter: (filter: 'single' | 'all') => void;
+  setDriverFilteredLine: (line: number) => void;
 }
 
 const OULU_STOPS: BusStop[] = [
@@ -50,25 +64,50 @@ export const useTransitStore = create<TransitStore>((set, get) => ({
   currentStopIndex: 0,
   signals: [],
   selectedStop: OULU_STOPS[0].name,
+  passengerMode: 'single',
+  driverBusFilter: 'all',
+  driverFilteredLine: 1,
 
-  sendSignal: (stopName: string, line: number) => {
+  sendSignal: (stopName: string, line: number, mode: 'single' | 'generic' = 'single') => {
+    // In single mode, cancel any existing signal
+    if (mode === 'single') {
+      const existingSignal = get().signals.find((s) => s.mode === 'single');
+      if (existingSignal) {
+        set((state) => ({
+          signals: state.signals.filter((s) => s.id !== existingSignal.id),
+        }));
+      }
+    }
+
+    // Estimate ETA based on number of stops ahead (simple simulation)
+    const stops = get().stops;
+    const currentIndex = get().currentStopIndex;
+    const stopIndex = Math.max(0, stops.findIndex((s) => s.name === stopName));
+    const stopsAhead = Math.max(0, stopIndex - currentIndex);
+    const secondsPerStop = 90; // assume 90s between stops for simulation
+    const baseArrival = 30; // minimum time in seconds
+    const etaSeconds = Math.max(baseArrival, stopsAhead * secondsPerStop + baseArrival);
+
     const newSignal: Signal = {
       id: `signal-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
       stopName,
       line,
       timestamp: new Date(),
       acknowledged: false,
+      remainingSeconds: etaSeconds,
+      mode,
     };
     set((state) => ({
       signals: [newSignal, ...state.signals],
     }));
+
+    // start ticking if not already
+    startTicker();
   },
 
-  acknowledgeSignal: (signalId: string) => {
+  cancelSignal: (signalId: string) => {
     set((state) => ({
-      signals: state.signals.map((s) =>
-        s.id === signalId ? { ...s, acknowledged: true } : s
-      ),
+      signals: state.signals.filter((s) => s.id !== signalId),
     }));
   },
 
@@ -87,4 +126,44 @@ export const useTransitStore = create<TransitStore>((set, get) => ({
       currentStopIndex: Math.min(state.currentStopIndex + 1, state.stops.length - 1),
     }));
   },
+
+  setPassengerMode: (mode: 'single' | 'generic') => {
+    set({ passengerMode: mode });
+  },
+
+  setDriverBusFilter: (filter: 'single' | 'all') => {
+    set({ driverBusFilter: filter });
+  },
+
+  setDriverFilteredLine: (line: number) => {
+    set({ driverFilteredLine: line });
+  },
 }));
+
+// Ticker implementation outside the zustand factory so it persists across calls
+let tickerId: ReturnType<typeof setInterval> | null = null;
+function startTicker() {
+  if (tickerId) return;
+  tickerId = setInterval(() => {
+    try {
+      useTransitStore.setState((state) => {
+        if (!state.signals || state.signals.length === 0) {
+          return state;
+        }
+        const updated = state.signals
+          .map((s) => ({ ...s, remainingSeconds: s.remainingSeconds - 1 }))
+          .filter((s) => s.remainingSeconds > 0);
+
+        // If no signals remain, stop the ticker
+        if (updated.length === 0 && tickerId) {
+          clearInterval(tickerId);
+          tickerId = null;
+        }
+
+        return { signals: updated } as Partial<TransitStore> as TransitStore;
+      });
+    } catch (e) {
+      // swallow errors from setState
+    }
+  }, 1000);
+}

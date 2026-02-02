@@ -69,7 +69,7 @@ interface DriverDashboardProps {
 }
 
 export default function DriverDashboard({ className }: DriverDashboardProps) {
-  const { stops, currentStopIndex, signals, acknowledgeSignal, dismissSignal } = useTransitStore();
+  const { stops, currentStopIndex, signals, dismissSignal, driverBusFilter, setDriverBusFilter, driverFilteredLine, setDriverFilteredLine } = useTransitStore();
   const [audioEnabled, setAudioEnabled] = useState(true);
 
   // Play alert sound for new signals
@@ -89,6 +89,16 @@ export default function DriverDashboard({ className }: DriverDashboardProps) {
     });
   };
 
+  // Filter signals based on driver bus mode
+  const filteredSignals = driverBusFilter === 'single'
+    ? signals.filter((s) => s.line === driverFilteredLine)
+    : signals;
+
+  // Count passengers waiting at each stop
+  const getPassengerCountAtStop = (stopName: string) => {
+    return filteredSignals.filter((s) => s.stopName === stopName).length;
+  };
+
   const unacknowledgedSignals = signals.filter(s => !s.acknowledged);
   const acknowledgedSignals = signals.filter(s => s.acknowledged);
 
@@ -106,11 +116,47 @@ export default function DriverDashboard({ className }: DriverDashboardProps) {
               <p className="text-xs text-slate-400">Smart Transit Signal System</p>
             </div>
           </div>
-          <div className="flex items-center gap-4">
-            <Badge variant="outline" className="border-emerald-500 text-emerald-400 px-3 py-1">
-              Line 1 - Active
-            </Badge>
-            <div className="text-right">
+          <div className="flex items-center gap-4 flex-wrap">
+            <div>
+              <Badge variant="outline" className="border-emerald-500 text-emerald-400 px-3 py-1">
+                {driverBusFilter === 'single' ? `Line ${driverFilteredLine} - Active` : 'All Lines - Active'}
+              </Badge>
+            </div>
+            <div className="flex items-center gap-2 ml-auto">
+              <span className="text-xs font-medium text-slate-400">Bus Filter:</span>
+              <button
+                onClick={() => setDriverBusFilter('single')}
+                className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
+                  driverBusFilter === 'single'
+                    ? 'bg-pink-500 text-white'
+                    : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                }`}
+              >
+                Single
+              </button>
+              <button
+                onClick={() => setDriverBusFilter('all')}
+                className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
+                  driverBusFilter === 'all'
+                    ? 'bg-pink-500 text-white'
+                    : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                }`}
+              >
+                All
+              </button>
+              {driverBusFilter === 'single' && (
+                <select
+                  value={driverFilteredLine}
+                  onChange={(e) => setDriverFilteredLine(Number(e.target.value))}
+                  className="px-2 py-1 text-xs bg-slate-700 text-slate-100 border border-slate-600 rounded-lg"
+                >
+                  <option value={1}>Line 1</option>
+                  <option value={5}>Line 5</option>
+                  <option value={10}>Line 10</option>
+                </select>
+              )}
+            </div>
+            <div className="text-right ml-auto">
               <DigitalClock />
               <p className="text-xs text-slate-400">Oulu, Finland</p>
             </div>
@@ -133,9 +179,8 @@ export default function DriverDashboard({ className }: DriverDashboardProps) {
               {stops.map((stop, index) => {
                 const isNext = index === currentStopIndex;
                 const isPassed = index < currentStopIndex;
-                const hasWaitingPassenger = signals.some(
-                  s => s.stopName === stop.name && !s.acknowledged
-                );
+                const passengerCount = getPassengerCountAtStop(stop.name);
+                const hasWaitingPassenger = passengerCount > 0;
 
                 return (
                   <div
@@ -161,7 +206,7 @@ export default function DriverDashboard({ className }: DriverDashboardProps) {
                         </h3>
                         {hasWaitingPassenger && (
                           <Badge className="bg-amber-500 text-black text-xs animate-pulse">
-                            WAITING
+                            {passengerCount} {passengerCount === 1 ? 'PASSENGER' : 'PASSENGERS'}
                           </Badge>
                         )}
                       </div>
@@ -201,7 +246,7 @@ export default function DriverDashboard({ className }: DriverDashboardProps) {
           </div>
 
           <ScrollArea className="flex-1 p-4">
-            {signals.length === 0 ? (
+            {filteredSignals.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-slate-500">
                 <div className="w-20 h-20 rounded-full bg-slate-800 flex items-center justify-center mb-4">
                   <BusIcon className="w-10 h-10 text-slate-600" />
@@ -211,130 +256,49 @@ export default function DriverDashboard({ className }: DriverDashboardProps) {
               </div>
             ) : (
               <div className="space-y-3">
-                {/* Unacknowledged Alerts */}
-                {unacknowledgedSignals.map((signal) => (
-                  <AlertCard
-                    key={signal.id}
-                    signal={signal}
-                    onAcknowledge={() => acknowledgeSignal(signal.id)}
-                    onDismiss={() => dismissSignal(signal.id)}
-                    formatTime={formatTime}
-                  />
-                ))}
-
-                {/* Acknowledged Alerts */}
-                {acknowledgedSignals.length > 0 && (
-                  <>
-                    <div className="flex items-center gap-2 py-2">
-                      <div className="flex-1 h-px bg-slate-700" />
-                      <span className="text-xs text-slate-500">Acknowledged</span>
-                      <div className="flex-1 h-px bg-slate-700" />
-                    </div>
-                    {acknowledgedSignals.map((signal) => (
-                      <AcknowledgedCard
-                        key={signal.id}
-                        signal={signal}
-                        onDismiss={() => dismissSignal(signal.id)}
-                        formatTime={formatTime}
-                      />
-                    ))}
-                  </>
-                )}
+                {/* Alerts grouped by stop */}
+                {Array.from(new Set(filteredSignals.map((s) => s.stopName))).map((stopName) => {
+                  const alertsAtStop = filteredSignals.filter((s) => s.stopName === stopName);
+                  return (
+                    <Card key={stopName} className="bg-amber-500/10 border-2 border-amber-500 animate-alert-flash">
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h3 className="text-lg font-bold text-amber-400 mb-1">
+                              {alertsAtStop.length} {alertsAtStop.length === 1 ? 'PASSENGER' : 'PASSENGERS'} WAITING
+                            </h3>
+                            <p className="text-white font-semibold">
+                              {stopName}
+                            </p>
+                            <div className="text-xs text-amber-200 mt-2 space-y-1">
+                              {alertsAtStop.map((signal) => (
+                                <div key={signal.id} className="flex justify-between items-center gap-2">
+                                  <span>Line {signal.line}</span>
+                                  <span className="font-mono text-amber-300">
+                                    ETA: {Math.floor(signal.remainingSeconds / 60)}:{(signal.remainingSeconds % 60).toString().padStart(2, '0')}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => alertsAtStop.forEach((s) => dismissSignal(s.id))}
+                            className="text-slate-400 hover:text-slate-200 text-xs h-8"
+                          >
+                            Clear
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
               </div>
             )}
           </ScrollArea>
         </div>
       </div>
     </div>
-  );
-}
-
-// Alert Card Component
-function AlertCard({
-  signal,
-  onAcknowledge,
-  onDismiss,
-  formatTime
-}: {
-  signal: Signal;
-  onAcknowledge: () => void;
-  onDismiss: () => void;
-  formatTime: (date: Date) => string;
-}) {
-  return (
-    <Card className="bg-amber-500/10 border-2 border-amber-500 animate-alert-flash animate-slide-in">
-      <CardContent className="p-4">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex-1">
-            <div className="flex items-center gap-2 mb-2">
-              <Badge className="bg-amber-500 text-black font-bold text-sm px-3">
-                LINE {signal.line}
-              </Badge>
-              <span className="text-xs text-amber-300 font-mono">
-                {formatTime(signal.timestamp)}
-              </span>
-            </div>
-            <h3 className="text-xl font-bold text-amber-400 mb-1">
-              PASSENGER WAITING
-            </h3>
-            <p className="text-white text-lg font-semibold">
-              {signal.stopName}
-            </p>
-          </div>
-          <div className="flex flex-col gap-2">
-            <Button
-              onClick={onAcknowledge}
-              className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold"
-            >
-              <AlertIcon className="w-4 h-4 mr-1" />
-              ACK
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onDismiss}
-              className="border-slate-600 text-slate-400 hover:text-white text-xs"
-            >
-              Dismiss
-            </Button>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-// Acknowledged Card Component
-function AcknowledgedCard({
-  signal,
-  onDismiss,
-  formatTime
-}: {
-  signal: Signal;
-  onDismiss: () => void;
-  formatTime: (date: Date) => string;
-}) {
-  return (
-    <Card className="bg-slate-800/50 border border-slate-700 opacity-75">
-      <CardContent className="p-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Badge variant="outline" className="border-slate-500 text-slate-400 text-xs">
-              Line {signal.line}
-            </Badge>
-            <span className="text-slate-400">{signal.stopName}</span>
-            <span className="text-xs text-slate-500">{formatTime(signal.timestamp)}</span>
-          </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onDismiss}
-            className="text-slate-500 hover:text-slate-300 text-xs h-6 px-2"
-          >
-            Clear
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
   );
 }
