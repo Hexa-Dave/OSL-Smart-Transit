@@ -18,6 +18,19 @@ export interface Signal {
   remainingSeconds: number;
   // mode: "single" (exclusive) or "generic" (multiple concurrent)
   mode: 'single' | 'generic';
+  // assigned physical bus id (when the system picks a bus)
+  assignedBusId?: string;
+}
+
+export interface Bus {
+  id: string;
+  line: number;
+  currentStopIndex: number;
+  // seconds until the bus reaches the next stop
+  timeToNextStopSeconds: number;
+  status: 'running' | 'out-of-service';
+  // optional GPS position for future use
+  position?: { lat: number; lon: number; accuracy?: number };
 }
 
 interface TransitStore {
@@ -27,6 +40,9 @@ interface TransitStore {
 
   // Signals
   signals: Signal[];
+
+  // Buses
+  buses: Bus[];
 
   // Passenger state
   selectedStop: string;
@@ -47,6 +63,11 @@ interface TransitStore {
   setPassengerMode: (mode: 'single' | 'generic') => void;
   setDriverBusFilter: (filter: 'single' | 'all') => void;
   setDriverFilteredLine: (line: number) => void;
+
+  // Bus actions
+  addBus: (bus: Bus) => void;
+  updateBusPosition: (busId: string, pos: { lat: number; lon: number; accuracy?: number }) => void;
+  setBusStatus: (busId: string, status: 'running' | 'out-of-service') => void;
 }
 
 const OULU_STOPS: BusStop[] = [
@@ -59,10 +80,18 @@ const OULU_STOPS: BusStop[] = [
   { id: '7', name: 'Linnanmaa', nameEn: 'Linnanmaa', distance: '7.1 km', eta: '16 min' },
 ];
 
+const SECONDS_PER_STOP = 90; // seconds between stops (used by simulation)
+
 export const useTransitStore = create<TransitStore>((set, get) => ({
   stops: OULU_STOPS,
   currentStopIndex: 0,
   signals: [],
+  // sample buses for simulation
+  buses: [
+    { id: 'bus-1-1', line: 1, currentStopIndex: 0, timeToNextStopSeconds: 30, status: 'running' },
+    { id: 'bus-2-1', line: 1, currentStopIndex: 3, timeToNextStopSeconds: 120, status: 'running' },
+    { id: 'bus-1-5', line: 5, currentStopIndex: 1, timeToNextStopSeconds: 20, status: 'running' },
+  ],
   selectedStop: OULU_STOPS[0].name,
   passengerMode: 'single',
   driverBusFilter: 'all',
@@ -79,14 +108,35 @@ export const useTransitStore = create<TransitStore>((set, get) => ({
       }
     }
 
-    // Estimate ETA based on number of stops ahead (simple simulation)
     const stops = get().stops;
-    const currentIndex = get().currentStopIndex;
     const stopIndex = Math.max(0, stops.findIndex((s) => s.name === stopName));
-    const stopsAhead = Math.max(0, stopIndex - currentIndex);
-    const secondsPerStop = 90; // assume 90s between stops for simulation
     const baseArrival = 30; // minimum time in seconds
-    const etaSeconds = Math.max(baseArrival, stopsAhead * secondsPerStop + baseArrival);
+
+    // Attempt to assign the best bus on this line
+    const candidateBuses = get().buses.filter((b) => b.line === line && b.status === 'running');
+    let assignedBusId: string | undefined;
+    let assignedEta: number | undefined;
+
+    if (candidateBuses.length > 0) {
+      let bestEta = Number.POSITIVE_INFINITY;
+      for (const b of candidateBuses) {
+        const stopsAhead = Math.max(0, stopIndex - b.currentStopIndex);
+        // skip buses that have already passed the stop for now
+        if (stopIndex < b.currentStopIndex) continue;
+        const eta = b.timeToNextStopSeconds + stopsAhead * SECONDS_PER_STOP;
+        if (eta < bestEta) {
+          bestEta = eta;
+          assignedBusId = b.id;
+          assignedEta = eta;
+        }
+      }
+    }
+
+    // Fallback ETA (global estimation) if no bus assigned
+    const currentIndex = get().currentStopIndex;
+    const stopsAheadGlobal = Math.max(0, stopIndex - currentIndex);
+    const etaFallback = Math.max(baseArrival, stopsAheadGlobal * SECONDS_PER_STOP + baseArrival);
+    const remaining = assignedEta ?? etaFallback;
 
     const newSignal: Signal = {
       id: `signal-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
@@ -94,9 +144,11 @@ export const useTransitStore = create<TransitStore>((set, get) => ({
       line,
       timestamp: new Date(),
       acknowledged: false,
-      remainingSeconds: etaSeconds,
+      remainingSeconds: remaining,
       mode,
+      assignedBusId,
     };
+
     set((state) => ({
       signals: [newSignal, ...state.signals],
     }));
@@ -138,6 +190,12 @@ export const useTransitStore = create<TransitStore>((set, get) => ({
   setDriverFilteredLine: (line: number) => {
     set({ driverFilteredLine: line });
   },
+
+  // Bus actions
+  addBus: (bus) => set((state) => ({ buses: [bus, ...state.buses] })),
+  updateBusPosition: (busId, pos) => set((state) => ({ buses: state.buses.map(b => b.id === busId ? { ...b, position: pos } : b) })),
+  setBusStatus: (busId, status) => set((state) => ({ buses: state.buses.map(b => b.id === busId ? { ...b, status } : b) })),
+
 }));
 
 // Ticker implementation outside the zustand factory so it persists across calls
@@ -147,20 +205,33 @@ function startTicker() {
   tickerId = setInterval(() => {
     try {
       useTransitStore.setState((state) => {
-        if (!state.signals || state.signals.length === 0) {
-          return state;
-        }
-        const updated = state.signals
+        // Update signals
+        const updatedSignals = state.signals
           .map((s) => ({ ...s, remainingSeconds: s.remainingSeconds - 1 }))
           .filter((s) => s.remainingSeconds > 0);
 
-        // If no signals remain, stop the ticker
-        if (updated.length === 0 && tickerId) {
+        // Update buses: decrement time to next stop, advance when reaching 0
+        const updatedBuses = (state.buses || []).map((b) => {
+          if (b.status !== 'running') return b;
+          let time = b.timeToNextStopSeconds - 1;
+          let index = b.currentStopIndex;
+          if (time <= 0) {
+            index = (index + 1) % state.stops.length; // loop route
+            time = SECONDS_PER_STOP;
+          }
+          return { ...b, currentStopIndex: index, timeToNextStopSeconds: Math.max(0, time) };
+        });
+
+        // Determine whether to keep ticker running
+        const anySignals = updatedSignals.length > 0;
+        const anyBusesRunning = updatedBuses.some((b) => b.status === 'running');
+
+        if (!anySignals && !anyBusesRunning && tickerId) {
           clearInterval(tickerId);
           tickerId = null;
         }
 
-        return { signals: updated } as Partial<TransitStore> as TransitStore;
+        return { signals: updatedSignals, buses: updatedBuses } as Partial<TransitStore> as TransitStore;
       });
     } catch (e) {
       // swallow errors from setState

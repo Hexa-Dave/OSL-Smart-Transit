@@ -69,7 +69,7 @@ interface DriverDashboardProps {
 }
 
 export default function DriverDashboard({ className }: DriverDashboardProps) {
-  const { stops, currentStopIndex, signals, dismissSignal, driverBusFilter, setDriverBusFilter, driverFilteredLine, setDriverFilteredLine } = useTransitStore();
+  const { stops, currentStopIndex, signals, dismissSignal, driverBusFilter, setDriverBusFilter, driverFilteredLine, setDriverFilteredLine, buses } = useTransitStore();
   const [audioEnabled, setAudioEnabled] = useState(true);
 
   // Play alert sound for new signals
@@ -243,6 +243,28 @@ export default function DriverDashboard({ className }: DriverDashboardProps) {
             >
               {audioEnabled ? 'Sound ON' : 'Sound OFF'}
             </Button>
+          </div>
+
+          {/* Fleet */}
+          <div className="p-4 border-b border-slate-700 bg-[hsl(222,47%,10%)]">
+            <h3 className="text-sm font-semibold text-white mb-2">Fleet</h3>
+            <div className="space-y-2">
+              {buses.map((bus) => {
+                const nextStop = stops[bus.currentStopIndex];
+                return (
+                  <div key={bus.id} className="flex items-center justify-between bg-slate-800 p-2 rounded-md">
+                    <div>
+                      <div className="text-sm font-semibold">Bus {bus.id} <span className="text-xs text-slate-400">Line {bus.line}</span></div>
+                      <div className="text-xs text-slate-400">{nextStop?.name ?? '—'}</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-mono text-sm">{bus.timeToNextStopSeconds}s</div>
+                      <div className="text-xs text-slate-400">{bus.status}</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
           <ScrollArea className="flex-1 p-4">

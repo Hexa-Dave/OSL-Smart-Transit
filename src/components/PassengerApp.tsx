@@ -254,6 +254,9 @@ export default function PassengerApp({ className }: PassengerAppProps) {
                       </Badge>
                       <p className="text-emerald-800 font-medium">Bus Line {signal.line} notified.</p>
                       <p className="text-sm text-emerald-700 mt-1">Stop: {signal.stopName}</p>
+                      {signal.assignedBusId ? (
+                        <p className="text-sm text-emerald-700 mt-1">Assigned: <span className="font-mono">{signal.assignedBusId}</span></p>
+                      ) : null}
                       <p className="text-emerald-700 font-mono text-lg mt-2">Arrival in {formatRemaining(signal.remainingSeconds)}</p>
                     </CardContent>
                   </Card>
@@ -280,6 +283,9 @@ export default function PassengerApp({ className }: PassengerAppProps) {
                             <Badge variant="outline" className="border-emerald-300 text-emerald-700">{signal.stopName}</Badge>
                           </div>
                           <p className="text-emerald-700 font-mono text-sm">Arrival in {formatRemaining(signal.remainingSeconds)}</p>
+                          {signal.assignedBusId && (
+                            <p className="text-xs text-emerald-700 mt-1">Assigned: <span className="font-mono">{signal.assignedBusId}</span></p>
+                          )}
                         </div>
                         <Button variant="ghost" size="sm" onClick={() => handleCancelSignal(signal.id)} className="text-red-500 hover:text-red-700 hover:bg-red-100 text-xs h-8">✕</Button>
                       </div>
