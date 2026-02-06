@@ -25,7 +25,10 @@ export interface Signal {
 export interface Bus {
   id: string;
   line: number;
-  currentStopIndex: number;
+  // route is an ordered list of stop indices (indexes into OULU_STOPS)
+  route: number[];
+  // index within `route` pointing to the next stop the bus is heading to
+  routePos: number;
   // seconds until the bus reaches the next stop
   timeToNextStopSeconds: number;
   status: 'running' | 'out-of-service';
@@ -72,26 +75,76 @@ interface TransitStore {
 
 const OULU_STOPS: BusStop[] = [
   { id: '1', name: 'Kaupungintalo', nameEn: 'City Hall', distance: '0.3 km', eta: '1 min' },
-  { id: '2', name: 'Toripakka', nameEn: 'Market Square', distance: '0.8 km', eta: '2 min' },
-  { id: '3', name: 'Rautatieasema', nameEn: 'Railway Station', distance: '1.5 km', eta: '4 min' },
-  { id: '4', name: 'Teknologiakylä', nameEn: 'Technology Village', distance: '2.8 km', eta: '7 min' },
-  { id: '5', name: 'Yliopisto', nameEn: 'University', distance: '4.2 km', eta: '10 min' },
-  { id: '6', name: 'Kontinkangas', nameEn: 'Kontinkangas', distance: '5.6 km', eta: '13 min' },
-  { id: '7', name: 'Linnanmaa', nameEn: 'Linnanmaa', distance: '7.1 km', eta: '16 min' },
+  { id: '2', name: 'Toripakka', nameEn: 'Market Square', distance: '0.5 km', eta: '1 min' },
+  { id: '3', name: 'Rautatieasema', nameEn: 'Railway Station', distance: '0.8 km', eta: '2 min' },
+  { id: '4', name: 'Isokatu', nameEn: 'Isokatu', distance: '0.9 km', eta: '2 min' },
+  { id: '5', name: 'Rotuaari', nameEn: 'Rotuaari', distance: '1.0 km', eta: '2 min' },
+  { id: '6', name: 'Myllytulli', nameEn: 'Myllytulli', distance: '1.2 km', eta: '3 min' },
+  { id: '7', name: 'Yliopisto', nameEn: 'University', distance: '1.8 km', eta: '4 min' },
+  { id: '8', name: 'Linnanmaa', nameEn: 'Linnanmaa', distance: '2.6 km', eta: '6 min' },
+  { id: '9', name: 'Kontinkangas', nameEn: 'Kontinkangas', distance: '3.0 km', eta: '7 min' },
+  { id: '10', name: 'Teknologiakylä', nameEn: 'Technology Village', distance: '3.8 km', eta: '8 min' },
+  { id: '11', name: 'Kaijonharju', nameEn: 'Kaijonharju', distance: '4.5 km', eta: '9 min' },
+  { id: '12', name: 'Hupisaaret', nameEn: 'Hupisaaret', distance: '5.0 km', eta: '10 min' },
+  { id: '13', name: 'Välivainio', nameEn: 'Välivainio', distance: '5.6 km', eta: '11 min' },
+  { id: '14', name: 'Koskela', nameEn: 'Koskela', distance: '6.1 km', eta: '12 min' },
+  { id: '15', name: 'Hollihaka', nameEn: 'Hollihaka', distance: '6.8 km', eta: '13 min' },
+  { id: '16', name: 'Nuottasaari', nameEn: 'Nuottasaari', distance: '7.4 km', eta: '15 min' },
+  { id: '17', name: 'Hiukkavaara', nameEn: 'Hiukkavaara', distance: '8.3 km', eta: '17 min' },
+  { id: '18', name: 'Ojakylä', nameEn: 'Ojakylä', distance: '9.1 km', eta: '19 min' },
+  { id: '19', name: 'Oulunsalo', nameEn: 'Oulunsalo', distance: '10.5 km', eta: '22 min' },
+  { id: '20', name: 'Metsokangas', nameEn: 'Metsokangas', distance: '11.8 km', eta: '25 min' },
 ];
 
 const SECONDS_PER_STOP = 90; // seconds between stops (used by simulation)
+
+// Routes map: lineNumber -> ordered list of stop indices (indexes into OULU_STOPS)
+export const ROUTES: Record<number, number[]> = {
+  1: [0, 3, 4, 5, 6, 7, 8, 9], // Central circular route
+  2: [2, 5, 10, 11, 12, 13], // Railway to Välivainio route
+  3: [14, 15, 16, 17, 18], // Northern loop
+  4: [0, 1, 2, 3, 4, 5], // Short central shuttle
+  5: [9, 6, 7, 8, 10, 13, 19], // Tech / University connector
+};
+
+// Helper: get all line numbers that serve a given stop index
+export function getAvailableLinesForStop(stopIndex: number): number[] {
+  return Object.entries(ROUTES)
+    .filter(([_, route]) => route.includes(stopIndex))
+    .map(([line]) => Number(line))
+    .sort((a, b) => a - b);
+}
+
+// Helper: create an initial fleet with `perLine` buses distributed along each line's route
+function createInitialBuses(perLine = 5): Bus[] {
+  const fleet: Bus[] = [];
+  const lineNumbers = Object.keys(ROUTES).map(Number).sort((a, b) => a - b);
+  for (const line of lineNumbers) {
+    const route = ROUTES[line];
+    if (!route || route.length === 0) continue;
+    const routeLen = route.length;
+    for (let i = 0; i < perLine; i++) {
+      const routePos = Math.floor((i * routeLen) / perLine) % routeLen;
+      const timeToNextStopSeconds = 10 + Math.floor(Math.random() * 80); // 10-89s randomized
+      fleet.push({
+        id: `bus-${line}-${i + 1}`,
+        line,
+        route,
+        routePos,
+        timeToNextStopSeconds,
+        status: 'running',
+      });
+    }
+  }
+  return fleet;
+}
 
 export const useTransitStore = create<TransitStore>((set, get) => ({
   stops: OULU_STOPS,
   currentStopIndex: 0,
   signals: [],
-  // sample buses for simulation
-  buses: [
-    { id: 'bus-1-1', line: 1, currentStopIndex: 0, timeToNextStopSeconds: 30, status: 'running' },
-    { id: 'bus-2-1', line: 1, currentStopIndex: 3, timeToNextStopSeconds: 120, status: 'running' },
-    { id: 'bus-1-5', line: 5, currentStopIndex: 1, timeToNextStopSeconds: 20, status: 'running' },
-  ],
+  // generated fleet: 5 buses per line
+  buses: createInitialBuses(5),
   selectedStop: OULU_STOPS[0].name,
   passengerMode: 'single',
   driverBusFilter: 'all',
@@ -112,17 +165,18 @@ export const useTransitStore = create<TransitStore>((set, get) => ({
     const stopIndex = Math.max(0, stops.findIndex((s) => s.name === stopName));
     const baseArrival = 30; // minimum time in seconds
 
-    // Attempt to assign the best bus on this line
-    const candidateBuses = get().buses.filter((b) => b.line === line && b.status === 'running');
+    // Attempt to assign the best bus on this line (considering route order)
+    const candidateBuses = get().buses.filter((b) => b.line === line && b.status === 'running' && b.route && b.route.includes(stopIndex));
     let assignedBusId: string | undefined;
     let assignedEta: number | undefined;
 
     if (candidateBuses.length > 0) {
       let bestEta = Number.POSITIVE_INFINITY;
       for (const b of candidateBuses) {
-        const stopsAhead = Math.max(0, stopIndex - b.currentStopIndex);
-        // skip buses that have already passed the stop for now
-        if (stopIndex < b.currentStopIndex) continue;
+        const routeLen = b.route.length;
+        const posTarget = b.route.indexOf(stopIndex);
+        if (posTarget === -1) continue;
+        const stopsAhead = (posTarget - b.routePos + routeLen) % routeLen;
         const eta = b.timeToNextStopSeconds + stopsAhead * SECONDS_PER_STOP;
         if (eta < bestEta) {
           bestEta = eta;
@@ -205,22 +259,74 @@ function startTicker() {
   tickerId = setInterval(() => {
     try {
       useTransitStore.setState((state) => {
-        // Update signals
-        const updatedSignals = state.signals
+        const stops = state.stops;
+
+        // Update buses: decrement time to next stop, advance along their route when reaching 0
+        const arrivals: Array<{ busId: string; stopIndex: number }> = [];
+        const updatedBuses = (state.buses || []).map((b) => {
+          if (b.status !== 'running' || !b.route || b.route.length === 0) return b;
+          let time = b.timeToNextStopSeconds - 1;
+          let routePos = b.routePos;
+          if (time <= 0) {
+            // bus has arrived at the stop indicated by route[routePos]
+            const arrivedStop = b.route[routePos];
+            arrivals.push({ busId: b.id, stopIndex: arrivedStop });
+            routePos = (routePos + 1) % b.route.length; // move to next stop in its route
+            time = SECONDS_PER_STOP;
+          }
+          return { ...b, routePos, timeToNextStopSeconds: Math.max(0, time) };
+        });
+
+        // Update signals: decrement timers and remove expired
+        let updatedSignals = state.signals
           .map((s) => ({ ...s, remainingSeconds: s.remainingSeconds - 1 }))
           .filter((s) => s.remainingSeconds > 0);
 
-        // Update buses: decrement time to next stop, advance when reaching 0
-        const updatedBuses = (state.buses || []).map((b) => {
-          if (b.status !== 'running') return b;
-          let time = b.timeToNextStopSeconds - 1;
-          let index = b.currentStopIndex;
-          if (time <= 0) {
-            index = (index + 1) % state.stops.length; // loop route
-            time = SECONDS_PER_STOP;
+        // Remove signals that were just served by an arriving bus
+        if (arrivals.length > 0) {
+          const arrivedSet = new Set(arrivals.map((a) => `${a.busId}::${stops[a.stopIndex].name}`));
+          updatedSignals = updatedSignals.filter((s) => {
+            // remove if this signal was assigned to a bus that has just arrived at this stop
+            if (s.assignedBusId && arrivedSet.has(`${s.assignedBusId}::${s.stopName}`)) {
+              return false;
+            }
+            return true;
+          });
+        }
+
+        // Recompute assignment and ETA for each remaining signal (choose shortest-time bus per line)
+        updatedSignals = updatedSignals.map((s) => {
+          const stopIndex = Math.max(0, stops.findIndex((st) => st.name === s.stopName));
+
+          // find candidate buses (must be running and serve the stop on their route)
+          const candidates = updatedBuses.filter((b) => b.line === s.line && b.status === 'running' && b.route && b.route.includes(stopIndex));
+
+          if (candidates.length === 0) {
+            // no candidates; keep previous assigned bus if any, just keep counting down
+            return s;
           }
-          return { ...b, currentStopIndex: index, timeToNextStopSeconds: Math.max(0, time) };
-        });
+
+          // pick bus with smallest ETA using route positions
+          let bestEta = Number.POSITIVE_INFINITY;
+          let bestBusId: string | undefined;
+          for (const b of candidates) {
+            const routeLen = b.route.length;
+            const posTarget = b.route.indexOf(stopIndex);
+            if (posTarget === -1) continue;
+            const stopsAhead = (posTarget - b.routePos + routeLen) % routeLen;
+            const eta = b.timeToNextStopSeconds + stopsAhead * SECONDS_PER_STOP;
+            if (eta < bestEta) {
+              bestEta = eta;
+              bestBusId = b.id;
+            }
+          }
+
+          if (bestBusId) {
+            return { ...s, assignedBusId: bestBusId, remainingSeconds: Math.max(0, Math.floor(bestEta)) };
+          }
+
+          return s;
+        }).filter((s) => s.remainingSeconds > 0);
 
         // Determine whether to keep ticker running
         const anySignals = updatedSignals.length > 0;

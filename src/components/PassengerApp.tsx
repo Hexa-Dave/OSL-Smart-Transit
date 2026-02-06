@@ -10,12 +10,14 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { useTransitStore } from '@/lib/store';
+import { useTransitStore, getAvailableLinesForStop } from '@/lib/store';
 
 const BUS_LINES = [
   { number: 1, route: 'Keskusta - Linnanmaa', color: 'bg-pink-500' },
-  { number: 5, route: 'Rautatieasema - Kaijonharju', color: 'bg-blue-600' },
-  { number: 10, route: 'Toripakka - Teknologiakylä', color: 'bg-emerald-500' },
+  { number: 2, route: 'Rautatieasema - Välivainio', color: 'bg-indigo-500' },
+  { number: 3, route: 'Hiukkavaara Loop', color: 'bg-yellow-500' },
+  { number: 4, route: 'Central Shuttle', color: 'bg-sky-500' },
+  { number: 5, route: 'Teknologiakylä - Yliopisto', color: 'bg-emerald-500' },
 ];
 
 // Oulu 2026 Logo Component - Faithful to the official design
@@ -337,7 +339,11 @@ export default function PassengerApp({ className }: PassengerAppProps) {
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-3 py-4">
-            {BUS_LINES.map((line) => (
+            {BUS_LINES.filter((line) => {
+              const stopIndex = stops.findIndex((s) => s.name === selectedStop);
+              const availableLineNumbers = getAvailableLinesForStop(stopIndex);
+              return availableLineNumbers.includes(line.number);
+            }).map((line) => (
               <button
                 key={line.number}
                 onClick={() => {

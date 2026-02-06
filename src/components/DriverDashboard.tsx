@@ -71,6 +71,7 @@ interface DriverDashboardProps {
 export default function DriverDashboard({ className }: DriverDashboardProps) {
   const { stops, currentStopIndex, signals, dismissSignal, driverBusFilter, setDriverBusFilter, driverFilteredLine, setDriverFilteredLine, buses } = useTransitStore();
   const [audioEnabled, setAudioEnabled] = useState(true);
+  const [expandedLines, setExpandedLines] = useState<Record<number, boolean>>({ 1: true, 2: false, 3: false, 4: false, 5: false });
 
   // Play alert sound for new signals
   useEffect(() => {
@@ -151,8 +152,10 @@ export default function DriverDashboard({ className }: DriverDashboardProps) {
                   className="px-2 py-1 text-xs bg-slate-700 text-slate-100 border border-slate-600 rounded-lg"
                 >
                   <option value={1}>Line 1</option>
+                  <option value={2}>Line 2</option>
+                  <option value={3}>Line 3</option>
+                  <option value={4}>Line 4</option>
                   <option value={5}>Line 5</option>
-                  <option value={10}>Line 10</option>
                 </select>
               )}
             </div>
@@ -247,20 +250,45 @@ export default function DriverDashboard({ className }: DriverDashboardProps) {
 
           {/* Fleet */}
           <div className="p-4 border-b border-slate-700 bg-[hsl(222,47%,10%)]">
-            <h3 className="text-sm font-semibold text-white mb-2">Fleet</h3>
+            <h3 className="text-sm font-semibold text-white mb-3">Fleet</h3>
             <div className="space-y-2">
-              {buses.map((bus) => {
-                const nextStop = stops[bus.currentStopIndex];
+              {[1, 2, 3, 4, 5].map((lineNum) => {
+                const lineBuses = buses.filter((b) => b.line === lineNum);
+                const isExpanded = expandedLines[lineNum];
                 return (
-                  <div key={bus.id} className="flex items-center justify-between bg-slate-800 p-2 rounded-md">
-                    <div>
-                      <div className="text-sm font-semibold">Bus {bus.id} <span className="text-xs text-slate-400">Line {bus.line}</span></div>
-                      <div className="text-xs text-slate-400">{nextStop?.name ?? '—'}</div>
-                    </div>
-                    <div className="text-right">
-                      <div className="font-mono text-sm">{bus.timeToNextStopSeconds}s</div>
-                      <div className="text-xs text-slate-400">{bus.status}</div>
-                    </div>
+                  <div key={lineNum} className="border border-slate-700 rounded-md overflow-hidden">
+                    {/* Line header - toggle */}
+                    <button
+                      onClick={() => setExpandedLines((prev) => ({ ...prev, [lineNum]: !isExpanded }))}
+                      className="w-full flex items-center justify-between bg-slate-800 hover:bg-slate-700 p-3 transition-all"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-white font-semibold">Line {lineNum}</span>
+                        <span className="text-xs text-slate-400">({lineBuses.length} buses)</span>
+                      </div>
+                      <span className="text-slate-400">{isExpanded ? '▼' : '▶'}</span>
+                    </button>
+                    {/* Buses for this line - collapsed/expanded */}
+                    {isExpanded && (
+                      <div className="bg-slate-900 p-2 space-y-2">
+                        {lineBuses.map((bus) => {
+                          const nextStopIndex = bus.route && bus.route[bus.routePos];
+                          const nextStop = typeof nextStopIndex === 'number' ? stops[nextStopIndex] : undefined;
+                          return (
+                            <div key={bus.id} className="flex items-center justify-between bg-slate-800 p-2 rounded-md text-sm">
+                              <div>
+                                <div className="text-xs font-semibold text-slate-100">{bus.id}</div>
+                                <div className="text-xs text-slate-500">{nextStop?.name ?? '—'}</div>
+                              </div>
+                              <div className="text-right">
+                                <div className="font-mono text-xs text-slate-300">{bus.timeToNextStopSeconds}s</div>
+                                <div className="text-xs text-slate-500">{bus.status}</div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -285,18 +313,23 @@ export default function DriverDashboard({ className }: DriverDashboardProps) {
                     <Card key={stopName} className="bg-amber-500/10 border-2 border-amber-500 animate-alert-flash">
                       <CardContent className="p-4">
                         <div className="flex items-center justify-between">
-                          <div>
+                          <div className="flex-1">
                             <h3 className="text-lg font-bold text-amber-400 mb-1">
                               {alertsAtStop.length} {alertsAtStop.length === 1 ? 'PASSENGER' : 'PASSENGERS'} WAITING
                             </h3>
                             <p className="text-white font-semibold">
                               {stopName}
                             </p>
-                            <div className="text-xs text-amber-200 mt-2 space-y-1">
+                            <div className="text-xs text-amber-200 mt-3 space-y-2">
                               {alertsAtStop.map((signal) => (
-                                <div key={signal.id} className="flex justify-between items-center gap-2">
-                                  <span>Line {signal.line}</span>
-                                  <span className="font-mono text-amber-300">
+                                <div key={signal.id} className="bg-slate-800 p-2 rounded flex justify-between items-start gap-2">
+                                  <div>
+                                    <div className="font-semibold text-amber-300">
+                                      {signal.assignedBusId ? `Bus: ${signal.assignedBusId}` : `Line ${signal.line} (unassigned)`}
+                                    </div>
+                                    <div className="text-xs text-slate-400">Signal ID: {signal.id.slice(-8)}</div>
+                                  </div>
+                                  <span className="font-mono text-amber-300 whitespace-nowrap">
                                     ETA: {Math.floor(signal.remainingSeconds / 60)}:{(signal.remainingSeconds % 60).toString().padStart(2, '0')}
                                   </span>
                                 </div>
@@ -307,7 +340,7 @@ export default function DriverDashboard({ className }: DriverDashboardProps) {
                             variant="ghost"
                             size="sm"
                             onClick={() => alertsAtStop.forEach((s) => dismissSignal(s.id))}
-                            className="text-slate-400 hover:text-slate-200 text-xs h-8"
+                            className="text-slate-400 hover:text-slate-200 text-xs h-8 ml-2"
                           >
                             Clear
                           </Button>
