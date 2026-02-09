@@ -1,0 +1,6 @@
+{
+  "busesPerLine": 5,
+  "timeToNextStopSecondsMin": 10,
+  "timeToNextStopSecondsMax": 89,
+  "secondsPerStop": 90
+}

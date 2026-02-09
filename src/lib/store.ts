@@ -1,4 +1,7 @@
 import { create } from 'zustand';
+import stopsData from '../data/stops.json';
+import routesData from '../data/routes.json';
+import busesCfg from '../data/buses.json';
 
 export interface BusStop {
   id: string;
@@ -73,39 +76,16 @@ interface TransitStore {
   setBusStatus: (busId: string, status: 'running' | 'out-of-service') => void;
 }
 
-const OULU_STOPS: BusStop[] = [
-  { id: '1', name: 'Kaupungintalo', nameEn: 'City Hall', distance: '0.3 km', eta: '1 min' },
-  { id: '2', name: 'Toripakka', nameEn: 'Market Square', distance: '0.5 km', eta: '1 min' },
-  { id: '3', name: 'Rautatieasema', nameEn: 'Railway Station', distance: '0.8 km', eta: '2 min' },
-  { id: '4', name: 'Isokatu', nameEn: 'Isokatu', distance: '0.9 km', eta: '2 min' },
-  { id: '5', name: 'Rotuaari', nameEn: 'Rotuaari', distance: '1.0 km', eta: '2 min' },
-  { id: '6', name: 'Myllytulli', nameEn: 'Myllytulli', distance: '1.2 km', eta: '3 min' },
-  { id: '7', name: 'Yliopisto', nameEn: 'University', distance: '1.8 km', eta: '4 min' },
-  { id: '8', name: 'Linnanmaa', nameEn: 'Linnanmaa', distance: '2.6 km', eta: '6 min' },
-  { id: '9', name: 'Kontinkangas', nameEn: 'Kontinkangas', distance: '3.0 km', eta: '7 min' },
-  { id: '10', name: 'Teknologiakylä', nameEn: 'Technology Village', distance: '3.8 km', eta: '8 min' },
-  { id: '11', name: 'Kaijonharju', nameEn: 'Kaijonharju', distance: '4.5 km', eta: '9 min' },
-  { id: '12', name: 'Hupisaaret', nameEn: 'Hupisaaret', distance: '5.0 km', eta: '10 min' },
-  { id: '13', name: 'Välivainio', nameEn: 'Välivainio', distance: '5.6 km', eta: '11 min' },
-  { id: '14', name: 'Koskela', nameEn: 'Koskela', distance: '6.1 km', eta: '12 min' },
-  { id: '15', name: 'Hollihaka', nameEn: 'Hollihaka', distance: '6.8 km', eta: '13 min' },
-  { id: '16', name: 'Nuottasaari', nameEn: 'Nuottasaari', distance: '7.4 km', eta: '15 min' },
-  { id: '17', name: 'Hiukkavaara', nameEn: 'Hiukkavaara', distance: '8.3 km', eta: '17 min' },
-  { id: '18', name: 'Ojakylä', nameEn: 'Ojakylä', distance: '9.1 km', eta: '19 min' },
-  { id: '19', name: 'Oulunsalo', nameEn: 'Oulunsalo', distance: '10.5 km', eta: '22 min' },
-  { id: '20', name: 'Metsokangas', nameEn: 'Metsokangas', distance: '11.8 km', eta: '25 min' },
-];
+const OULU_STOPS: BusStop[] = stopsData;
 
-const SECONDS_PER_STOP = 90; // seconds between stops (used by simulation)
+// Constants loaded from JSON config
+const SECONDS_PER_STOP = busesCfg.secondsPerStop;
 
 // Routes map: lineNumber -> ordered list of stop indices (indexes into OULU_STOPS)
-export const ROUTES: Record<number, number[]> = {
-  1: [0, 3, 4, 5, 6, 7, 8, 9], // Central circular route
-  2: [2, 5, 10, 11, 12, 13], // Railway to Välivainio route
-  3: [14, 15, 16, 17, 18], // Northern loop
-  4: [0, 1, 2, 3, 4, 5], // Short central shuttle
-  5: [9, 6, 7, 8, 10, 13, 19], // Tech / University connector
-};
+export const ROUTES: Record<number, number[]> = Object.entries(routesData).reduce(
+  (acc, [key, val]) => ({ ...acc, [Number(key)]: val }),
+  {}
+);
 
 // Helper: get all line numbers that serve a given stop index
 export function getAvailableLinesForStop(stopIndex: number): number[] {
@@ -116,7 +96,7 @@ export function getAvailableLinesForStop(stopIndex: number): number[] {
 }
 
 // Helper: create an initial fleet with `perLine` buses distributed along each line's route
-function createInitialBuses(perLine = 5): Bus[] {
+function createInitialBuses(perLine = busesCfg.busesPerLine): Bus[] {
   const fleet: Bus[] = [];
   const lineNumbers = Object.keys(ROUTES).map(Number).sort((a, b) => a - b);
   for (const line of lineNumbers) {
@@ -125,7 +105,7 @@ function createInitialBuses(perLine = 5): Bus[] {
     const routeLen = route.length;
     for (let i = 0; i < perLine; i++) {
       const routePos = Math.floor((i * routeLen) / perLine) % routeLen;
-      const timeToNextStopSeconds = 10 + Math.floor(Math.random() * 80); // 10-89s randomized
+      const timeToNextStopSeconds = busesCfg.timeToNextStopSecondsMin + Math.floor(Math.random() * (busesCfg.timeToNextStopSecondsMax - busesCfg.timeToNextStopSecondsMin + 1));
       fleet.push({
         id: `bus-${line}-${i + 1}`,
         line,

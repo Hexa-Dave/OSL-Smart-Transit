@@ -1,0 +1,32 @@
+[
+  {
+    "number": 1,
+    "name": "Central Circle",
+    "route": "Keskusta - Linnanmaa",
+    "color": "bg-pink-500"
+  },
+  {
+    "number": 2,
+    "name": "Railway Express",
+    "route": "Rautatieasema - Välivainio",
+    "color": "bg-indigo-500"
+  },
+  {
+    "number": 3,
+    "name": "Northern Loop",
+    "route": "Hiukkavaara Loop",
+    "color": "bg-yellow-500"
+  },
+  {
+    "number": 4,
+    "name": "Central Shuttle",
+    "route": "Central Shuttle",
+    "color": "bg-sky-500"
+  },
+  {
+    "number": 5,
+    "name": "Tech Connector",
+    "route": "Teknologiakylä - Yliopisto",
+    "color": "bg-emerald-500"
+  }
+]
