@@ -1,9 +1,42 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 
+const ICONS = [
+  { key: 'pin', label: 'Pin', emoji: '📍' },
+  { key: 'home', label: 'Home', emoji: '🏠' },
+  { key: 'work', label: 'Work', emoji: '💼' },
+  { key: 'play', label: 'Play', emoji: '🎾' },
+  { key: 'building', label: 'Building', emoji: '🏢' },
+  { key: 'shop', label: 'Shop', emoji: '🛍️' },
+];
+
 export default function TravelGuidePage() {
+  const [showSaveModal, setShowSaveModal] = useState(false);
+  const [placeName, setPlaceName] = useState('');
+  const [selectedIcon, setSelectedIcon] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const openSave = (presetName: string) => {
+    setPlaceName(presetName);
+    setSelectedIcon(presetName === 'Home' ? 'home' : presetName === 'Work' ? 'work' : null);
+    setShowSaveModal(true);
+  };
+
+  const closeSave = () => {
+    setShowSaveModal(false);
+    setPlaceName('');
+    setSelectedIcon(null);
+    setSearchQuery('');
+  };
+
+  const handleSave = () => {
+    // For now, just log — later persist via API
+    console.log('Save place', { name: placeName, icon: selectedIcon, searchQuery });
+    closeSave();
+  };
+
   return (
     <div className="min-h-screen pt-6 pb-20 bg-white">
       <div className="max-w-md mx-auto px-4">
@@ -27,8 +60,8 @@ export default function TravelGuidePage() {
           </div>
 
           <div className="flex gap-3">
-            <button className="flex-1 rounded-xl border border-slate-200 py-3">Add home</button>
-            <button className="flex-1 rounded-xl border border-slate-200 py-3">Add work</button>
+            <button onClick={() => openSave('Home')} className="flex-1 rounded-xl border border-slate-200 py-3">Add home</button>
+            <button onClick={() => openSave('Work')} className="flex-1 rounded-xl border border-slate-200 py-3">Add work</button>
             <button className="w-12 rounded-xl border border-slate-200 py-3">+</button>
           </div>
         </div>
@@ -46,6 +79,57 @@ export default function TravelGuidePage() {
           </div>
         </section>
       </div>
+
+      {/* Save Place Modal */}
+      {showSaveModal && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center pt-12 px-4">
+          <div className="absolute inset-0 bg-black/40" onClick={closeSave} />
+          <div className="relative bg-white w-full max-w-md rounded-lg shadow-lg p-6">
+            <button onClick={closeSave} className="absolute right-4 top-4 text-sky-500 text-2xl">✕</button>
+            <h2 className="text-xl font-bold text-center mb-4">Save place</h2>
+
+            <div className="space-y-3">
+              <div>
+                <input
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search by address or place name"
+                  className="w-full rounded-lg border px-4 py-3 bg-transparent"
+                />
+              </div>
+              <div>
+                <input
+                  value={placeName}
+                  onChange={(e) => setPlaceName(e.target.value)}
+                  placeholder="Name (e.g. Home)"
+                  className="w-full rounded-lg border px-4 py-3 bg-transparent"
+                />
+              </div>
+
+              <div>
+                <div className="font-semibold mb-2">Select the place's icon</div>
+                <div className="grid grid-cols-6 gap-2">
+                  {ICONS.map((ic) => (
+                    <button
+                      key={ic.key}
+                      onClick={() => setSelectedIcon(ic.key)}
+                      className={`p-3 rounded-lg border ${selectedIcon === ic.key ? 'bg-slate-800 text-white' : 'bg-white text-slate-700'}`}
+                    >
+                      <div className="text-lg">{ic.emoji}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mt-4">
+                <Button variant="default" className="w-full" onClick={handleSave} disabled={!placeName || !selectedIcon}>
+                  Save
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
