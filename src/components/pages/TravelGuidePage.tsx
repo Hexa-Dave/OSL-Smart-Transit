@@ -62,7 +62,7 @@ export default function TravelGuidePage() {
           <div className="flex gap-3">
             <button onClick={() => openSave('Home')} className="flex-1 rounded-xl border border-slate-200 py-3">Add home</button>
             <button onClick={() => openSave('Work')} className="flex-1 rounded-xl border border-slate-200 py-3">Add work</button>
-            <button className="w-12 rounded-xl border border-slate-200 py-3">+</button>
+            <button onClick={() => openSave('')} className="w-12 rounded-xl border border-slate-200 py-3">+</button>
           </div>
         </div>
 
@@ -101,7 +101,7 @@ export default function TravelGuidePage() {
                 <input
                   value={placeName}
                   onChange={(e) => setPlaceName(e.target.value)}
-                  placeholder="Name (e.g. Home)"
+                  placeholder="Give the name a place (optional)"
                   className="w-full rounded-lg border px-4 py-3 bg-transparent"
                 />
               </div>
@@ -122,7 +122,7 @@ export default function TravelGuidePage() {
               </div>
 
               <div className="mt-4">
-                <Button variant="default" className="w-full" onClick={handleSave} disabled={!placeName || !selectedIcon}>
+                <Button variant="default" className="w-full" onClick={handleSave} disabled={!selectedIcon}>
                   Save
                 </Button>
               </div>
